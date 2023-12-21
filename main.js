@@ -14,22 +14,104 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-const getInfoOrganization = ({ result = [], typeData }) => {
-  console.log("getInfoOrganization---", result, typeData);
-  result.map((item) => {});
+const getInfoOrganization = ({ result = [] }) => {
+  return result.map((item) => {
+    const organizationId = item._id;
+    const resultUsers = USERS.filter(
+      (user) => user.organization_id === organizationId
+    ).map((x) => x.name);
+    const resultTickets = TICKETS.filter(
+      (ticket) => ticket.organization_id === organizationId
+    ).map((x) => x.subject);
+    return {
+      id: item._id,
+      name: item.name,
+      details: item.details,
+      created_at: item.created_at,
+      domain_names: item.domain_names.map((i) => i).join(","),
+      tags: item.tags.map((i) => i).join(","),
+      users: resultUsers.map((i) => i).join(","),
+      tickets: resultTickets.map((i) => i).join(","),
+    };
+  });
+};
+const getInfoUsers = ({ result = [] }) => {
+  return result.map((item) => {
+    const resultOrganization = ORGANIZATIONS.filter(
+      (organization) => organization._id === item.organization_id
+    ).map((x) => x.name);
+    const resultAssignedTickets = TICKETS.filter(
+      (ticket) => ticket.assignee_id === item._id
+    ).map((x) => x.subject);
+    const resultSubmittedTickets = TICKETS.filter(
+      (ticket) => ticket.submitter_id === item._id
+    ).map((x) => x.subject);
+    return {
+      ...item,
+      organization: resultOrganization,
+      assignedTickets: resultAssignedTickets,
+      submittedTickets: resultSubmittedTickets,
+    };
+  });
+};
+const getInfoTickets = ({ result = [] }) => {
+  return result.map((ticket) => {
+    const resultAssignedTickets = USERS.filter(
+      (user) => user._id === ticket.assignee_id
+    ).map((x) => x.name);
+    const resultSubmittedTickets = USERS.filter(
+      (user) => user._id === ticket.submitter_id
+    ).map((x) => x.name);
+    const resultOrganization = ORGANIZATIONS.filter(
+      (organization) => organization._id === ticket.organization_id
+    ).map((x) => x.name);
+    return {
+      ...ticket,
+      assignedTickets: resultAssignedTickets,
+      submittedTickets: resultSubmittedTickets,
+      organization: resultOrganization,
+    };
+  });
 };
 
 const searchData = ({ data, field, value }) => {
-  const result = data.filter((o) => {
-    if (Array.isArray(o[field])) {
-      return o[field].includes(value);
+  const result = data.filter((item) => {
+    if (item[field]) {
+      if (Array.isArray(item[field])) {
+        return item[field].includes(value);
+      }
+      return item[field] === value;
     }
-    return o[field] === value;
   });
-  if (!result) {
-    return [];
-  }
   return result;
+};
+
+const PrintTable = (data) => {
+  console.log("dataTable", JSON.stringify(data, null, 2));
+};
+const handleTableTypeData = ({ data, typeData, field, value }) => {
+  const result = searchData({ data, field, value });
+  if (!result || result.length === 0) {
+    console.log("Result not found!");
+    requestQuestion();
+    return;
+  }
+  switch (typeData) {
+    case "organizations":
+      const resultInfoOrganization = getInfoOrganization({ result });
+      PrintTable(resultInfoOrganization);
+      break;
+    case "users":
+      const resultInfoUsers = getInfoUsers({ result });
+      PrintTable(resultInfoUsers);
+      break;
+    case "tickets":
+      const resultInfoTickets = getInfoTickets({ result });
+      PrintTable(resultInfoTickets);
+      break;
+    default:
+      break;
+  }
 };
 
 const PrintDescribe = (data) => {
@@ -40,29 +122,12 @@ const PrintDescribe = (data) => {
   console.log(JSON.stringify(data[0], null, 2));
 };
 
-const PrintTable = ({ data, typeData, field, value }) => {
-  const result = searchData({ data, field, value });
-  switch (typeData) {
-    case "organizations":
-      getInfoOrganization({ result, typeData });
-      break;
-    case "users":
-      getInfoOrganization({ result, typeData });
-      break;
-    case "tickets":
-      getInfoOrganization({ result, typeData });
-      break;
-
-    default:
-      break;
-  }
-};
-
 const PrintSearch = ({ data, field, value }) => {
   const result = searchData({ data, field, value });
-  if (!result) {
+  if (!result || result.length === 0) {
     console.log("Result not found!");
     requestQuestion();
+    return;
   }
   const formatResponse = {
     number_of_result: result.length,
@@ -77,13 +142,20 @@ const handleAction = ({ action, typeData, field, value }) => {
       ? ORGANIZATIONS
       : typeData === "users"
       ? USERS
-      : TICKETS;
+      : typeData === "tickets"
+      ? TICKETS
+      : null;
+  if (!data) {
+    console.log("Not found: 404");
+    requestQuestion();
+    return;
+  }
   switch (action) {
     case ACTION.describe:
       PrintDescribe(data);
       break;
     case ACTION.table:
-      PrintTable({ data, field, value, typeData });
+      handleTableTypeData({ data, field, value, typeData });
       break;
     case ACTION.search:
       PrintSearch({ data, field, value });
