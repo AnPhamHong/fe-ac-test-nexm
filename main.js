@@ -3,49 +3,77 @@ const readline = require("readline");
 const ORGANIZATIONS = require("./data/organizations.json");
 const TICKETS = require("./data/tickets.json");
 const USERS = require("./data/users.json");
-const ACTION = {
-  describe: "describe",
-  table: "table",
-  search: "search",
-};
+const { ACTION, ACTION_USER, TYPE_DATA } = require("./constants");
 
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
 
-const getInfoOrganization = ({ result = [] }) => {
-  return result.map((item) => {
-    const organizationId = item._id;
-    const resultUsers = USERS.filter(
-      (user) => user.organization_id === organizationId
-    ).map((x) => x.name);
-    const resultTickets = TICKETS.filter(
-      (ticket) => ticket.organization_id === organizationId
-    ).map((x) => x.subject);
-    return {
-      id: item._id,
-      name: item.name,
-      details: item.details,
-      created_at: item.created_at,
-      domain_names: item.domain_names.map((i) => i).join(","),
-      tags: item.tags.map((i) => i).join(","),
-      users: resultUsers.map((i) => i).join(","),
-      tickets: resultTickets.map((i) => i).join(","),
-    };
-  });
+const handleGenerateArrByKey = (
+  arr = [],
+  keyCompare,
+  valueCompare,
+  keyReturn
+) => {
+  if (!arr || !arr.length) return [];
+  return arr
+    .filter((item) => item[keyCompare] === valueCompare)
+    .map((ele) => ele[keyReturn]);
 };
+
+const getInfoOrganization = ({ result = [] }) => {
+  return result.map(
+    ({ _id, name, details, created_at, domain_names, tags }) => {
+      const organizationId = _id;
+      const resultUsers = handleGenerateArrByKey(
+        USERS,
+        "organization_id",
+        organizationId,
+        "name"
+      );
+      const resultTickets = handleGenerateArrByKey(
+        TICKETS,
+        "organization_id",
+        organizationId,
+        "subject"
+      );
+      return {
+        id: _id,
+        name: name,
+        details: details,
+        created_at: created_at,
+        domain_names: domain_names.map((i) => i).join(","),
+        tags: tags.map((i) => i).join(","),
+        users: resultUsers.map((i) => i).join(","),
+        tickets: resultTickets.map((i) => i).join(","),
+      };
+    }
+  );
+};
+
 const getInfoUsers = ({ result = [] }) => {
   return result.map((item) => {
-    const resultOrganization = ORGANIZATIONS.filter(
-      (organization) => organization._id === item.organization_id
-    ).map((x) => x.name);
-    const resultAssignedTickets = TICKETS.filter(
-      (ticket) => ticket.assignee_id === item._id
-    ).map((x) => x.subject);
-    const resultSubmittedTickets = TICKETS.filter(
-      (ticket) => ticket.submitter_id === item._id
-    ).map((x) => x.subject);
+    const resultOrganization = handleGenerateArrByKey(
+      ORGANIZATIONS,
+      "_id",
+      item.organization_id,
+      "name"
+    );
+    const resultAssignedTickets = handleGenerateArrByKey(
+      TICKETS,
+      "assignee_id",
+      item._id,
+      "subject"
+    );
+
+    const resultSubmittedTickets = handleGenerateArrByKey(
+      TICKETS,
+      "submitter_id",
+      item._id,
+      "subject"
+    );
+
     return {
       ...item,
       organization: resultOrganization,
@@ -54,17 +82,29 @@ const getInfoUsers = ({ result = [] }) => {
     };
   });
 };
+
 const getInfoTickets = ({ result = [] }) => {
   return result.map((ticket) => {
-    const resultAssignedTickets = USERS.filter(
-      (user) => user._id === ticket.assignee_id
-    ).map((x) => x.name);
-    const resultSubmittedTickets = USERS.filter(
-      (user) => user._id === ticket.submitter_id
-    ).map((x) => x.name);
-    const resultOrganization = ORGANIZATIONS.filter(
-      (organization) => organization._id === ticket.organization_id
-    ).map((x) => x.name);
+    const resultAssignedTickets = handleGenerateArrByKey(
+      TICKETS,
+      "_id",
+      ticket.assignee_id,
+      "name"
+    );
+
+    const resultSubmittedTickets = handleGenerateArrByKey(
+      USERS,
+      "_id",
+      ticket.submitter_id,
+      "name"
+    );
+
+    const resultOrganization = handleGenerateArrByKey(
+      ORGANIZATIONS,
+      "_id",
+      ticket.organization_id,
+      "name"
+    );
     return {
       ...ticket,
       assignedTickets: resultAssignedTickets,
@@ -89,25 +129,29 @@ const searchData = ({ data, field, value }) => {
 const PrintTable = (data) => {
   console.log("dataTable", JSON.stringify(data, null, 2));
 };
+
 const handleTableTypeData = ({ data, typeData, field, value }) => {
   const result = searchData({ data, field, value });
-  if (!result || result.length === 0) {
+  if (!result || !result.length) {
     console.log("Result not found!");
     requestQuestion();
     return;
   }
+
+  let resultForEveryCase = {};
+
   switch (typeData) {
-    case "organizations":
-      const resultInfoOrganization = getInfoOrganization({ result });
-      PrintTable(resultInfoOrganization);
+    case TYPE_DATA.ORGANIZATIONS:
+      resultForEveryCase = getInfoOrganization({ result });
+      PrintTable(resultForEveryCase);
       break;
-    case "users":
-      const resultInfoUsers = getInfoUsers({ result });
-      PrintTable(resultInfoUsers);
+    case TYPE_DATA.USERS:
+      resultForEveryCase = getInfoUsers({ result });
+      PrintTable(resultForEveryCase);
       break;
-    case "tickets":
-      const resultInfoTickets = getInfoTickets({ result });
-      PrintTable(resultInfoTickets);
+    case TYPE_DATA.TICKETS:
+      resultForEveryCase = getInfoTickets({ result });
+      PrintTable(resultForEveryCase);
       break;
     default:
       break;
@@ -119,45 +163,50 @@ const PrintDescribe = (data) => {
     console.log("Not found: 404");
     return;
   }
+
   console.log(JSON.stringify(data[0], null, 2));
 };
 
 const PrintSearch = ({ data, field, value }) => {
   const result = searchData({ data, field, value });
-  if (!result || result.length === 0) {
+  if (!result || !result.length) {
     console.log("Result not found!");
     requestQuestion();
     return;
   }
+
   const formatResponse = {
     number_of_result: result.length,
     search_result: result,
   };
+
   console.log(JSON.stringify(formatResponse, null, 2));
 };
 
 const handleAction = ({ action, typeData, field, value }) => {
   const data =
-    typeData === "organizations"
+    typeData === TYPE_DATA.ORGANIZATIONS
       ? ORGANIZATIONS
-      : typeData === "users"
+      : typeData === TYPE_DATA.USERS
       ? USERS
-      : typeData === "tickets"
+      : typeData === TYPE_DATA.TICKETS
       ? TICKETS
       : null;
+
   if (!data) {
     console.log("Not found: 404");
     requestQuestion();
     return;
   }
+
   switch (action) {
-    case ACTION.describe:
+    case ACTION.DESCRIBE:
       PrintDescribe(data);
       break;
-    case ACTION.table:
+    case ACTION.TABLE:
       handleTableTypeData({ data, field, value, typeData });
       break;
-    case ACTION.search:
+    case ACTION.SEARCH:
       PrintSearch({ data, field, value });
       break;
     default:
@@ -165,15 +214,17 @@ const handleAction = ({ action, typeData, field, value }) => {
       requestQuestion();
       break;
   }
+
   requestQuestion();
 };
 
 const requestQuestion = () => {
   rl.question("Please enter your selection (help | quit): ", (input) => {
-    if (input === "quit") {
+    if (input === ACTION_USER.QUIT) {
       rl.close();
+      return;
     }
-    if (input === "help") {
+    if (input === ACTION_USER.HELP) {
       fs.readFile("help.txt", "utf8", function (err, data) {
         // Display the file content
         if (err) {
@@ -184,12 +235,15 @@ const requestQuestion = () => {
       });
       return;
     }
+
     const [action, typeData, params] = input.split("-");
     let field;
     let value;
+
     if (params) {
       [field, value] = params?.split("=");
     }
+
     handleAction({ action, typeData, field, value });
   });
 };
